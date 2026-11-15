@@ -41,8 +41,10 @@
     autoconnect: true
     state: present
     conn_reload: true
+  register: administration_connection
 
 - name: Activate administration network interface
   community.general.nmcli:
     conn_name: "{{ administration_interface }}"
     state: up
+  when: administration_connection is changed
