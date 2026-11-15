@@ -114,23 +114,61 @@
     insertafter: '^#%PAM-1.0'
     block: |
       # No nullok: an unenrolled account must not bypass TOTP.
-      auth required pam_google_authenticator.so
+      auth required pam_google_authenticator.so secret=${HOME}/.totp/.google_authenticator
   notify: Restart sshd
 
-# Only authorized user accounts receive TOTP configuration.
-- name: Install administrator TOTP enrollment on all servers
-  ansible.builtin.copy:
-    dest: "/home/{{ item.name }}/.google_authenticator"
+# Store TOTP enrollment files separately from other home directory files.
+- name: Create administrator TOTP directories
+  ansible.builtin.file:
+    path: "/home/{{ item.name }}/.totp"
+    state: directory
     owner: "{{ item.name }}"
     group: "{{ item.name }}"
+    mode: "0700"
+  loop: "{{ crag_ssh_users }}"
+  no_log: true
+
+# Register persistent SELinux contexts for TOTP directories and files.
+- name: Configure administrator TOTP SELinux contexts
+  community.general.sefcontext:
+    target: "/home/{{ item.name }}/\\.totp(/.*)?"
+    setype: ssh_home_t
+    state: present
+  loop: "{{ crag_ssh_users }}"
+  when: ansible_selinux.status == "enabled"
+
+# Install the enrollment file only if it does not already exist.
+- name: Check administrator TOTP enrollment files
+  ansible.builtin.stat:
+    path: "/home/{{ item.name }}/.totp/.google_authenticator"
+  loop: "{{ crag_ssh_users }}"
+  register: totp_enrollment_files
+  no_log: true
+
+# Preserve PAM-managed authentication state on subsequent deployments.
+- name: Install administrator TOTP enrollment on all servers
+  ansible.builtin.copy:
+    dest: "/home/{{ item.item.name }}/.totp/.google_authenticator"
+    owner: "{{ item.item.name }}"
+    group: "{{ item.item.name }}"
     mode: "0600"
     content: |
-      {{ item.totp_secret }}
+      {{ item.item.totp_secret }}
       " WINDOW_SIZE 3
       " TOTP_AUTH
       " RATE_LIMIT 3 30
-  loop: "{{ crag_ssh_users }}"
+  loop: "{{ totp_enrollment_files.results }}"
+  when: not item.stat.exists
   no_log: true
+
+# Apply the registered SELinux contexts.
+- name: Restore administrator TOTP file contexts
+  ansible.builtin.command:
+    cmd: "restorecon -Rv /home/{{ item.name }}/.totp"
+  loop: "{{ crag_ssh_users }}"
+  register: totp_restorecon
+  changed_when: totp_restorecon.stdout | length > 0
+  when: ansible_selinux.status == "enabled"
 
 # Match rules must be placed after the main sshd_config Include and
 # other global directives; an early drop-in Match can leak to later files.
