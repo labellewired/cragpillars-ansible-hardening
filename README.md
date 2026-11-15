@@ -132,8 +132,8 @@ Each Kickstart can be supplied to the installer using the `inst.ks=` boot option
    ansible-vault encrypt group_vars/all/secrets.yml
    ```
 7. Replace the example **crag_admin** SSH public key (crag_admin_ssh_public_key) in `group_vars/all/vars.yml` and review all IP addresses, hostnames, and workstation restrictions for your environment.
-8. Review `inventory.ini` and verify the Ansible connection method. Bastion uses a local connection; Web and Infrastructure are reached through their administration IPs. Ensure that `crag_admin` can connect from Bastion to both remote servers over SSH and has sudo privileges on all three servers.
-9. From `ansible/`, run the deployment playbook. On its **first run**, it uses the Kickstart SSH password to install a dedicated Ed25519 automation key on Bastion and authorize it on Web/Infra **before** enabling the final SSH/MFA restrictions. It also enrolls the TOTP secret from Vault on all three hosts. Do not interrupt the first run during SSH/firewall changes:
+8. Review `inventory.ini` and verify the Ansible connection method. Bastion uses a local connection; Web and Infrastructure are reached through their administration IPs. Verify ICMP connectivity from Bastion to both remote servers.
+9. From `ansible/`, run the deployment playbook. On its **first run**, it generates a dedicated Ed25519 automation key on Bastion, then uses the Kickstart SSH password to authorize the public key on Web/Infra **before** enabling the final SSH/MFA restrictions. It also enrolls the TOTP secret from Vault on all three hosts. Do not interrupt the first run during SSH/firewall changes:
    ```bash
    ansible-playbook run.yml -u crag_admin --ask-pass --ask-become-pass --ask-vault-pass
    ```
@@ -147,7 +147,7 @@ Each Kickstart can be supplied to the installer using the `inst.ks=` boot option
     ```
     **Bootstrap limitation:** The first deployment still depends on password-based SSH from the Kickstarts and has not been end-to-end tested. Ensure the administrator's public key and Vault TOTP seed are valid before deploying. Keep console access available for recovery.
 
-**Important:** The Kickstarts deliberately contain the `REPLACE_WITH_PASSWORD_HASH` placeholder instead of a working administrator password hash. Generate and insert a valid hash locally before installing. Do not commit your customized Kickstarts with real credentials. `ansible.cfg` also disables SSH host-key checking for this lab; verify and pin host keys before treating this as a trusted environment. Do not carry that setting into an untrusted or production environment.
+**Important:** The Kickstarts deliberately contain the `REPLACE_WITH_PASSWORD_HASH` placeholder instead of a working administrator password hash. Generate and insert a valid hash locally before installing. Do not commit your customized Kickstarts with real credentials.
 
 ## SSH access policy
 

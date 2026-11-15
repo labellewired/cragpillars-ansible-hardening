@@ -18,6 +18,7 @@
     state: present
     exclusive: false
   loop: "{{ crag_ssh_users }}"
+  no_log: true
 
 - name: Ensure SSH configuration directory exists
   ansible.builtin.file:
