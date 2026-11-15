@@ -1,0 +1,34 @@
+# Ansible secrets
+ansible/group_vars/all/secrets.yml
+.vault_pass
+.vault_password
+
+# Ansible generated files
+.ansible/
+*.retry
+
+# SSH private keys
+id_rsa
+id_ed25519
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Operating systems
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak

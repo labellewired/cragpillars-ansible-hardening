@@ -1,0 +1,10 @@
+---
+# ============================================================
+# CragPillars - Requirements
+# ============================================================
+
+collections:
+  - name: ansible.posix
+  - name: community.general
+  - name: community.mysql
+  - name: community.crypto

@@ -1,0 +1,124 @@
+---
+# ============================================================
+# CragPillars - Common firewall configuration
+# Applied to all servers
+# ============================================================
+
+# ------------------------------------------------------------
+# Firewalld service
+# ------------------------------------------------------------
+
+- name: Ensure firewalld is enabled and running
+  ansible.builtin.systemd_service:
+    name: firewalld
+    enabled: true
+    state: started
+
+# ------------------------------------------------------------
+# Firewall zones
+# ------------------------------------------------------------
+
+- name: Ensure public zone exists
+  ansible.posix.firewalld:
+    zone: public
+    state: present
+    permanent: true
+
+- name: Ensure administration zone exists
+  ansible.posix.firewalld:
+    zone: administration
+    state: present
+    permanent: true
+  register: administration_zone_result
+
+# Reload immediately so the new zone is available to subsequent tasks.
+# A deferred handler could execute too late.
+- name: Reload firewalld after creating administration zone  # noqa: no-handler
+  ansible.builtin.command:
+    cmd: firewall-cmd --reload
+  when: administration_zone_result is changed
+  changed_when: true
+
+- name: Get current default firewalld zone
+  ansible.builtin.command:
+    cmd: firewall-cmd --get-default-zone
+  register: current_default_zone
+  changed_when: false
+
+- name: Set default firewalld zone to drop
+  ansible.builtin.command:
+    cmd: firewall-cmd --set-default-zone=drop
+  when: current_default_zone.stdout | trim != "drop"
+  changed_when: true
+
+# ------------------------------------------------------------
+# Zone services
+# ------------------------------------------------------------
+
+# Install the six-path allowlist before assigning interfaces to zones.
+# This preserves Bastion-to-managed-host SSH during initial bootstrap.
+- name: Permit administration workstation SSH during firewall setup
+  ansible.posix.firewalld:
+    zone: administration
+    rich_rule: >-
+      rule family="ipv4"
+      source address="{{ administration_client_ip }}/32"
+      destination address="{{ administration_ip }}/32"
+      service name="ssh" accept
+    state: enabled
+    permanent: true
+    immediate: true
+
+- name: Permit Bastion automation SSH during firewall setup
+  ansible.posix.firewalld:
+    zone: administration
+    rich_rule: >-
+      rule family="ipv4"
+      source address="{{ hostvars[groups['bastion'][0]].administration_ip }}/32"
+      destination address="{{ administration_ip }}/32"
+      service name="ssh" accept
+    state: enabled
+    permanent: true
+    immediate: true
+  when: inventory_hostname in groups['web'] + groups['infra']
+
+- name: Permit designated public workstation SSH during firewall setup
+  ansible.posix.firewalld:
+    zone: public
+    rich_rule: >-
+      rule family="ipv4"
+      source address="{{ public_client_ip }}/32"
+      destination address="{{ public_ip }}/32"
+      service name="ssh" accept
+    state: enabled
+    permanent: true
+    immediate: true
+  when: inventory_hostname in groups['bastion']
+
+- name: Remove Cockpit from public zone
+  ansible.posix.firewalld:
+    zone: public
+    service: cockpit
+    state: disabled
+    permanent: true
+    immediate: true
+
+# ------------------------------------------------------------
+# Interface assignments
+# ------------------------------------------------------------
+
+- name: Assign public interface to public zone
+  ansible.posix.firewalld:
+    zone: public
+    interface: "{{ public_interface }}"
+    state: enabled
+    permanent: true
+    immediate: true
+
+- name: Assign administration interface to administration zone
+  ansible.posix.firewalld:
+    zone: administration
+    interface: "{{ administration_interface }}"
+    state: enabled
+    permanent: true
+    immediate: true

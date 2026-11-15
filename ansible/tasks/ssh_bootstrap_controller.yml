@@ -1,0 +1,30 @@
+---
+# ============================================================
+# CragPillars - Ansible controller key bootstrap
+# Run locally on Bastion before configuring remote hosts
+# ============================================================
+
+- name: Ensure administrator SSH directory exists on Bastion
+  ansible.builtin.file:
+    path: /home/crag_admin/.ssh
+    state: directory
+    owner: crag_admin
+    group: crag_admin
+    mode: "0700"
+
+# The key is generated once, stays on Bastion, and is never committed.
+- name: Generate dedicated Ansible SSH key on Bastion
+  ansible.builtin.command:
+    cmd: ssh-keygen -q -t ed25519 -N "" -f /home/crag_admin/.ssh/id_ed25519_ansible -C cragpillars-ansible
+    creates: /home/crag_admin/.ssh/id_ed25519_ansible
+  become: true
+  become_user: crag_admin
+
+- name: Read Ansible controller public key
+  ansible.builtin.slurp:
+    src: /home/crag_admin/.ssh/id_ed25519_ansible.pub
+  register: crag_ansible_public_key_file
+
+- name: Make Ansible controller public key available to managed hosts
+  ansible.builtin.set_fact:
+    crag_ansible_public_key: "{{ crag_ansible_public_key_file.content | b64decode | trim }}"

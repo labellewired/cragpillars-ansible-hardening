@@ -1,0 +1,234 @@
+---
+# ============================================================
+# CragPillars - Main deployment playbook
+# ============================================================
+
+# ------------------------------------------------------------
+# SSH automation key bootstrap - Before SSH hardening
+# ------------------------------------------------------------
+
+- name: Generate dedicated SSH automation key on Bastion
+  hosts: bastion
+  become: true
+  tasks:
+    - name: Import SSH automation key generation tasks
+      ansible.builtin.import_tasks: tasks/ssh_bootstrap_controller.yml
+
+
+# Detect existing SSH automation access
+- name: Detect existing SSH automation access
+  hosts: web:infra
+  gather_facts: false
+
+  tasks:
+    # Check whether the automation key is already authorized.
+    # A failed check is expected during the first deployment.
+    - name: Test existing SSH automation key
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - /home/crag_admin/.ssh/id_ed25519_ansible
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=10
+          - -o
+          - PreferredAuthentications=publickey
+          - -o
+          - PasswordAuthentication=no
+          - -o
+          - StrictHostKeyChecking=accept-new
+          - "crag_admin@{{ ansible_host }}"
+          - "true"
+      delegate_to: bastion.crag.internal
+      become: true
+      become_user: crag_admin
+      register: automation_ssh_check
+      changed_when: false
+      failed_when: false
+
+    # Reuse the automation key when it is already installed.
+    - name: Configure existing SSH automation credentials
+      ansible.builtin.set_fact:
+        ansible_ssh_private_key_file: /home/crag_admin/.ssh/id_ed25519_ansible
+        ansible_ssh_common_args: >-
+          -o PreferredAuthentications=publickey
+          -o PasswordAuthentication=no
+          -o BatchMode=yes
+      when: automation_ssh_check.rc == 0
+
+- name: Install Bastion automation key on Web and Infra
+  hosts: web:infra
+  become: true
+  tasks:
+    - name: Import SSH automation key distribution tasks
+      ansible.builtin.import_tasks: tasks/ssh_bootstrap_targets.yml
+
+# ------------------------------------------------------------
+# SSH automation key verification - Before SSH hardening
+# ------------------------------------------------------------
+
+- name: Verify Bastion automation SSH access
+  hosts: web:infra
+  gather_facts: false
+
+  tasks:
+    # Test a fresh SSH connection using only the automation key.
+    # BatchMode prevents password prompts or fallback.
+    - name: Verify passwordless SSH authentication from Bastion
+      ansible.builtin.command:
+        argv:
+          - ssh
+          - -i
+          - /home/crag_admin/.ssh/id_ed25519_ansible
+          - -o
+          - BatchMode=yes
+          - -o
+          - ConnectTimeout=10
+          - -o
+          - PreferredAuthentications=publickey
+          - -o
+          - PasswordAuthentication=no
+          - -o
+          - StrictHostKeyChecking=accept-new
+          - "crag_admin@{{ ansible_host }}"
+          - "true"
+      delegate_to: bastion.crag.internal
+      become: true
+      become_user: crag_admin
+      changed_when: false
+
+# ------------------------------------------------------------
+# Switch managed hosts to SSH key authentication
+# ------------------------------------------------------------
+
+- name: Switch Ansible to dedicated SSH automation key
+  hosts: web:infra
+  gather_facts: false
+
+  tasks:
+    # All subsequent Ansible connections use the key generated
+    # on Bastion instead of the initial Kickstart password.
+    - name: Configure automation SSH credentials
+      ansible.builtin.set_fact:
+        ansible_ssh_private_key_file: /home/crag_admin/.ssh/id_ed25519_ansible
+        ansible_ssh_common_args: >-
+          -o PreferredAuthentications=publickey
+          -o PasswordAuthentication=no
+          -o BatchMode=yes
+
+    # Close any existing password-authenticated SSH connection.
+    # The next task must establish a fresh key-based connection.
+    - name: Reset existing SSH connection
+      ansible.builtin.meta: reset_connection
+
+    - name: Verify Ansible connectivity using automation key
+      ansible.builtin.ping:
+
+# ------------------------------------------------------------
+# Common configuration - All servers
+# ------------------------------------------------------------
+
+- name: Configure common CragPillars settings
+  hosts: all
+  become: true
+
+  handlers:
+    - name: Import common handlers
+      ansible.builtin.import_tasks: handlers/main.yml
+
+  tasks:
+    - name: Configure common server settings
+      ansible.builtin.import_tasks: tasks/common.yml
+    - name: Configure firewall
+      ansible.builtin.import_tasks: tasks/firewall.yml
+    - name: Configure network interfaces
+      ansible.builtin.import_tasks: tasks/networking.yml
+
+
+# ------------------------------------------------------------
+# Bastion
+# ------------------------------------------------------------
+
+- name: Configure Bastion server
+  hosts: bastion
+  become: true
+
+  handlers:
+    - name: Import common handlers
+      ansible.builtin.import_tasks: handlers/main.yml
+
+  tasks:
+    - name: Configure Chrony client
+      ansible.builtin.import_tasks: tasks/chrony_client.yml
+
+    - name: Configure rsyslog client
+      ansible.builtin.import_tasks: tasks/rsyslog_client.yml
+
+    - name: Configure Bastion services
+      ansible.builtin.import_tasks: tasks/bastion.yml
+
+
+# ------------------------------------------------------------
+# Web
+# ------------------------------------------------------------
+
+- name: Configure Web server
+  hosts: web
+  become: true
+
+  handlers:
+    - name: Import common handlers
+      ansible.builtin.import_tasks: handlers/main.yml
+
+  tasks:
+    - name: Configure Chrony client
+      ansible.builtin.import_tasks: tasks/chrony_client.yml
+
+    - name: Configure rsyslog client
+      ansible.builtin.import_tasks: tasks/rsyslog_client.yml
+
+    - name: Configure Web services
+      ansible.builtin.import_tasks: tasks/web.yml
+
+
+# ------------------------------------------------------------
+# Infrastructure
+# ------------------------------------------------------------
+
+- name: Configure Infrastructure server
+  hosts: infra
+  become: true
+
+  handlers:
+    - name: Import common handlers
+      ansible.builtin.import_tasks: handlers/main.yml
+
+  tasks:
+    - name: Configure Infrastructure services
+      ansible.builtin.import_tasks: tasks/infra.yml
+
+# ------------------------------------------------------------
+# SSH hardening - Last to avoid locking out the bootstrap session
+# ------------------------------------------------------------
+
+- name: Configure SSH authentication and final SSH firewall policy
+  hosts: all
+  become: true
+
+  handlers:
+    - name: Import common handlers
+      ansible.builtin.import_tasks: handlers/main.yml
+
+  tasks:
+    - name: Configure SSH authentication and MFA
+      ansible.builtin.import_tasks: tasks/ssh.yml
+
+    - name: Apply final SSH firewall restrictions
+      ansible.builtin.import_tasks: tasks/ssh_firewall.yml
+
+    # Validate and reload SSH after all authentication and
+    # firewall tasks have completed.
+    - name: Validate and apply final SSH configuration
+      ansible.builtin.meta: flush_handlers

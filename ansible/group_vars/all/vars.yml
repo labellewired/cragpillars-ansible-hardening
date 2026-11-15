@@ -1,0 +1,49 @@
+---
+# ============================================================
+# CragPillars - Global variables
+# ============================================================
+
+# Domain
+crag_domain: crag.internal
+web_fqdn: www.cragpillars.com
+
+# Networks
+public_network: 10.10.1.0/24
+public_gateway: 10.10.1.2
+administration_network: 10.10.10.0/24
+
+# Network interfaces
+public_interface: ens33
+administration_interface: ens36
+
+# Workstations
+public_client_ip: 10.10.1.200
+administration_client_ip: 10.10.10.100
+
+# DNS
+primary_dns: 10.10.10.40
+secondary_dns: 9.9.9.9
+
+# Infrastructure services
+ntp_server: 10.10.10.40
+rsyslog_server: 10.10.10.40
+
+# Common users
+crag_users:
+  - name: crag_admin
+    password: "{{ vault_crag_admin_password_hash }}"
+
+# SSH users
+crag_ssh_users:
+  - name: crag_admin
+    public_key: "{{ crag_admin_ssh_public_key }}"
+    totp_secret: "{{ vault_crag_admin_totp_secret }}"
+
+crag_admin_ssh_public_key: >-
+  ssh-ed25519
+  AAAAC3NzaC1lZDI1NTE5AAAAIBUwY3Io+q9AuQjH8xvKOHR8S1UoqeofK+hlt1ePERzW
+  crag_admin
+
+# Common system configuration
+selinux_state: enforcing
+firewalld_default_zone: drop

@@ -1,0 +1,36 @@
+---
+# ============================================================
+# CragPillars - Rsyslog client configuration
+# Applied to Bastion and Web
+# ============================================================
+
+- name: Remove legacy rsyslog forwarding configuration
+  ansible.builtin.file:
+    path: /etc/rsyslog.d/crag-forward.conf
+    state: absent
+  notify: Restart rsyslog
+
+- name: Configure remote logging to infrastructure server
+  ansible.builtin.copy:
+    dest: /etc/rsyslog.d/crag-remote.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      action(
+          type="omfwd"
+          target="{{ rsyslog_server }}"
+          port="514"
+          protocol="tcp"
+          action.resumeRetryCount="-1"
+          queue.type="linkedList"
+          queue.filename="crag_remote"
+          queue.saveOnShutdown="on"
+      )
+  notify: Restart rsyslog
+
+- name: Ensure rsyslog is enabled and running
+  ansible.builtin.systemd_service:
+    name: rsyslog
+    enabled: true
+    state: started

@@ -1,0 +1,25 @@
+---
+# ============================================================
+# CragPillars - Final SSH firewall restrictions
+# Applied after SSH bootstrap and authentication hardening
+# ============================================================
+
+# The common firewall configuration already installs the six
+# permitted SSH paths. Remove unrestricted SSH access from
+# both zones while preserving the explicit rich rules.
+
+- name: Disable broad SSH service on administration interface
+  ansible.posix.firewalld:
+    zone: administration
+    service: ssh
+    state: disabled
+    permanent: true
+    immediate: true
+
+- name: Disable broad SSH service on public interface
+  ansible.posix.firewalld:
+    zone: public
+    service: ssh
+    state: disabled
+    permanent: true
+    immediate: true

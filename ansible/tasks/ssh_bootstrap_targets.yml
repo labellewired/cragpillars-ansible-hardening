@@ -1,0 +1,12 @@
+---
+# ============================================================
+# CragPillars - Install automation key on managed hosts
+# First run uses the Kickstart administrator password over SSH.
+# ============================================================
+
+- name: Authorize Bastion's dedicated Ansible SSH key
+  ansible.posix.authorized_key:
+    user: crag_admin
+    key: "{{ hostvars[groups['bastion'][0]].crag_ansible_public_key }}"
+    state: present
+    exclusive: false

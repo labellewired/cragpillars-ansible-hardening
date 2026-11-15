@@ -1,0 +1,160 @@
+---
+# ============================================================
+# CragPillars - SSH hardening and MFA
+# Applied to all servers, after SSH key bootstrap and services
+# ============================================================
+
+- name: Install OpenSSH server and Google Authenticator PAM module
+  ansible.builtin.dnf:
+    name:
+      - openssh-server
+      - google-authenticator
+    state: present
+
+- name: Deploy administrator workstation public key
+  ansible.posix.authorized_key:
+    user: "{{ item.name }}"
+    key: "{{ item.public_key }}"
+    state: present
+    exclusive: false
+  loop: "{{ crag_ssh_users }}"
+
+- name: Ensure SSH configuration directory exists
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Remove superseded drop-ins to avoid first-value-wins conflicts.
+- name: Remove obsolete CragPillars SSH drop-ins
+  ansible.builtin.file:
+    path: "/etc/ssh/sshd_config.d/{{ item }}"
+    state: absent
+  loop:
+    - 99-crag.conf
+    - 00-crag-bastion.conf
+  notify: Restart sshd
+
+- name: Install legal SSH login banner
+  ansible.builtin.copy:
+    dest: /etc/ssh/banner.txt
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      ************************************************************************
+                               CragPillars
+                           Authorized Access Only
+      ************************************************************************
+
+      This system is restricted to authorized users.
+
+      All access and activity may be monitored and logged.
+      Unauthorized access is prohibited.
+
+      Disconnect immediately if you are not an authorized user.
+
+      ************************************************************************
+
+# This early drop-in precedes the distribution's 40-/50- files.
+# Users must use a public key followed by a PAM TOTP code.
+- name: Deploy common OpenSSH hardening policy
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/00-crag.conf
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      # Authentication: public key plus TOTP for users SSH sessions.
+      PermitRootLogin no
+      PubkeyAuthentication yes
+      PasswordAuthentication no
+      KbdInteractiveAuthentication yes
+      AuthenticationMethods publickey,keyboard-interactive:pam
+      UsePAM yes
+      AllowUsers crag_admin
+      MaxAuthTries 3
+      LoginGraceTime 30
+
+      # Session liveness (not an idle-user timeout).
+      ClientAliveInterval 300
+      ClientAliveCountMax 2
+
+      # No SSH forwarding or tunneling through any server.
+      X11Forwarding no
+      AllowTcpForwarding no
+      AllowAgentForwarding no
+      PermitTunnel no
+
+      # Disable unused authentication mechanisms.
+      GSSAPIAuthentication no
+      HostbasedAuthentication no
+
+      # Authentication auditing and pre-login warning.
+      Banner /etc/ssh/banner.txt
+      LogLevel VERBOSE
+  notify: Restart sshd
+
+# Preserve the distribution's PAM account/session rules. Only replace
+# the SSH password-authentication path with TOTP verification.
+- name: Disable password authentication in SSH PAM stack
+  ansible.builtin.replace:
+    path: /etc/pam.d/sshd
+    regexp: '^(auth\s+(?:substack|include)\s+password-auth\s*)$'
+    replace: '# \1  # Disabled by CragPillars: SSH uses public key + TOTP'
+  notify: Restart sshd
+
+- name: Require Google Authenticator for SSH keyboard-interactive authentication
+  ansible.builtin.blockinfile:
+    path: /etc/pam.d/sshd
+    marker: '# {mark} CragPillars SSH MFA'
+    insertafter: '^#%PAM-1.0'
+    block: |
+      # No nullok: an unenrolled account must not bypass TOTP.
+      auth required pam_google_authenticator.so
+  notify: Restart sshd
+
+# Only authorized user accounts receive TOTP configuration.
+- name: Install administrator TOTP enrollment on all servers
+  ansible.builtin.copy:
+    dest: "/home/{{ item.name }}/.google_authenticator"
+    owner: "{{ item.name }}"
+    group: "{{ item.name }}"
+    mode: "0600"
+    content: |
+      {{ item.totp_secret }}
+      " WINDOW_SIZE 3
+      " TOTP_AUTH
+      " RATE_LIMIT 3 30
+  loop: "{{ crag_ssh_users }}"
+  no_log: true
+
+# Match rules must be placed after the main sshd_config Include and
+# other global directives; an early drop-in Match can leak to later files.
+# Bastion-to-Web/Infra automation uses its dedicated SSH key, not TOTP.
+- name: Allow key-only SSH for Bastion-originated automation on managed hosts
+  ansible.builtin.blockinfile:
+    path: /etc/ssh/sshd_config
+    marker: '# {mark} CragPillars Ansible SSH exception'
+    insertafter: EOF
+    block: |
+      Match User crag_admin Address 10.10.10.10 LocalAddress {{ administration_ip }}
+          AuthenticationMethods publickey
+  when: inventory_hostname in groups['web'] + groups['infra']
+  notify: Restart sshd
+
+- name: Remove automation exception from Bastion if present
+  ansible.builtin.blockinfile:
+    path: /etc/ssh/sshd_config
+    marker: '# {mark} CragPillars Ansible SSH exception'
+    state: absent
+  when: inventory_hostname in groups['bastion']
+  notify: Restart sshd
+
+- name: Ensure sshd is enabled and running
+  ansible.builtin.systemd_service:
+    name: sshd
+    enabled: true
+    state: started

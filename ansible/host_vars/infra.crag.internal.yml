@@ -1,0 +1,9 @@
+---
+# ============================================================
+# CragPillars - Infrastructure
+# ============================================================
+
+crag_hostname: infra.crag.internal
+
+public_ip: 10.10.1.40
+administration_ip: 10.10.10.40
