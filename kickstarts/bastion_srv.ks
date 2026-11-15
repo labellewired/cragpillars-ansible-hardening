@@ -42,8 +42,7 @@ timezone America/Toronto --utc
 ## Public network interface
 network --bootproto=static --device=ens33 --ip=10.10.1.10 --netmask=255.255.255.0 --gateway=10.10.1.2 --nameserver=10.10.1.40,9.9.9.9 --onboot=on
 
-## Administration network interface
-network --bootproto=static --device=ens36 --ip=10.10.10.10 --netmask=255.255.255.0 --onboot=on
+## Administration interface is configured by the installer-side %post script.
 
 ## Hostname
 network --hostname="bastion.crag.internal"
@@ -97,4 +96,82 @@ dnf install ansible-core -y
 
 # Disable IPv6 system-wide
 grubby --update-kernel=ALL --args="ipv6.disable=1"
+%end
+
+# Discover the administration NIC and configure its persistent name.
+# This installer-side script writes into the installed system.
+%post --nochroot --erroronfail --log=/tmp/crag-admin-network.log
+set -eu
+
+# Exactly two Ethernet NICs are expected; ens33 is the public NIC.
+admin_device=""
+count=0
+
+for device_path in /sys/class/net/*; do
+    device="${device_path##*/}"
+
+    [ "$device" = "ens33" ] && continue
+    [ -f "$device_path/type" ] || continue
+    [ "$(cat "$device_path/type")" = "1" ] || continue
+    [ -e "$device_path/device" ] || continue
+
+    count=$((count + 1))
+    admin_device="$device"
+done
+
+if [ "$count" -ne 1 ]; then
+    echo "Expected exactly one administration Ethernet NIC; found $count" >&2
+    exit 1
+fi
+
+pci_path="$(udevadm info --query=property --path="/sys/class/net/$admin_device" | sed -n 's/^ID_PATH=//p')"
+
+if [ -z "$pci_path" ]; then
+    echo "Could not discover PCI path for $admin_device" >&2
+    exit 1
+fi
+
+sysroot=/mnt/sysroot
+
+if [ ! -d "$sysroot/etc" ]; then
+    echo "Installed system not found" >&2
+    exit 1
+fi
+
+mkdir -p "$sysroot/etc/systemd/network"
+mkdir -p "$sysroot/etc/NetworkManager/system-connections"
+
+cat > "$sysroot/etc/systemd/network/10-crag-admin.link" <<EOF
+[Match]
+Path=$pci_path
+
+[Link]
+NamePolicy=
+Name=cragadmin0
+EOF
+
+cat > "$sysroot/etc/NetworkManager/system-connections/cragadmin0.nmconnection" <<EOF
+[connection]
+id=cragadmin0
+type=ethernet
+interface-name=cragadmin0
+autoconnect=true
+
+[ethernet]
+
+[ipv4]
+method=manual
+address1=10.10.10.10/24
+never-default=true
+
+[ipv6]
+method=disabled
+EOF
+
+chmod 600 "$sysroot/etc/NetworkManager/system-connections/cragadmin0.nmconnection"
+
+# Ensure generated configuration files receive appropriate SELinux labels.
+touch "$sysroot/.autorelabel"
+
+echo "Administration NIC: $admin_device ($pci_path) -> cragadmin0 (10.10.10.10/24)"
 %end

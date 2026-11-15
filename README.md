@@ -11,13 +11,13 @@ The environment consists of three VMware virtual machines: a Bastion/Ansible con
 Each VM has two network interfaces:
 
 - **Public network:** `ens33`, `10.10.1.0/24`, with gateway `10.10.1.2`.
-- **Administration network:** `ens36`, `10.10.10.0/24`, without a default gateway.
+- **Administration network:** `cragadmin0`, `10.10.10.0/24`, without a default gateway.
 
-| Server         | Hostname                | Public/ens33 | Admin/ens36   | Primary roles                     |
-|----------------|-------------------------|--------------|---------------|-----------------------------------|
-| Bastion        | `bastion.crag.internal` | `10.10.1.10` | `10.10.10.10` | SSH access, Ansible control node  |
-| Web            | `web.crag.internal`     | `10.10.1.20` | `10.10.10.20` | Nginx, PHP-FPM, and local MariaDB |
-| Infrastructure | `infra.crag.internal`   | `10.10.1.40` | `10.10.10.40` | DNS, NTP, central logs, auditing  |
+| Server         | Hostname                | Public/ens33 | Admin/cragadmin0 | Primary roles                     |
+|----------------|-------------------------|--------------|------------------|-----------------------------------|
+| Bastion        | `bastion.crag.internal` | `10.10.1.10` | `10.10.10.10`    | SSH access, Ansible control node  |
+| Web            | `web.crag.internal`     | `10.10.1.20` | `10.10.10.20`    | Nginx, PHP-FPM, and local MariaDB |
+| Infrastructure | `infra.crag.internal`   | `10.10.1.40` | `10.10.10.40`    | DNS, NTP, central logs, auditing  |
 
 The lab also defines a public client (`10.10.1.200`) and an administration workstation (`10.10.10.100`). `www.cragpillars.com` is a **lab web hostname placeholder**; using it outside the lab requires appropriate DNS configuration.
 
@@ -107,7 +107,7 @@ The Kickstarts assume the installation disk is named **`sda`** and include a des
 
 These steps describe the intended workflow; they are **not yet a verified, one-command deployment procedure** for the refactored project.
 
-1. Create the three VMs and attach `ens33` to the public network and `ens36` to the administration network. Check VMware interface naming and disk selection.
+1. Create each VM with exactly two Ethernet NICs: `ens33` on the public network and a second NIC on the administration network. The Kickstart detects the second NIC by exclusion, records its installer-visible PCI path, and configures the persistent name `cragadmin0`. Check disk selection before installing. If the virtual PCI topology changes later, reinstall or regenerate the `.link` match.
 2. Install CentOS Stream 10 using the provided Kickstarts. Review the files in `kickstarts/` and generate a password hash using `openssl passwd -6`. Replace `REPLACE_WITH_PASSWORD_HASH` in each file with the resulting hash. Use a unique, disposable lab password. Install CentOS Stream 10 on each VM using its corresponding Kickstart file:
 Bastion: `kickstarts/bastion_srv.ks`
 Web:     `kickstarts/web_srv.ks`

@@ -14,7 +14,7 @@ administration_network: 10.10.10.0/24
 
 # Network interfaces
 public_interface: ens33
-administration_interface: ens36
+administration_interface: cragadmin0
 
 # Workstations
 public_client_ip: 10.10.1.200
