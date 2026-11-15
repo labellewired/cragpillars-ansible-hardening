@@ -9,6 +9,7 @@
     name:
       - openssh-server
       - google-authenticator
+      - policycoreutils-python-utils
     state: present
 
 - name: Deploy administrator workstation public key
@@ -136,6 +137,7 @@
     state: present
   loop: "{{ crag_ssh_users }}"
   when: ansible_selinux.status == "enabled"
+  no_log: true
 
 # Install the enrollment file only if it does not already exist.
 - name: Check administrator TOTP enrollment files
@@ -169,6 +171,7 @@
   register: totp_restorecon
   changed_when: totp_restorecon.stdout | length > 0
   when: ansible_selinux.status == "enabled"
+  no_log: true
 
 # Match rules must be placed after the main sshd_config Include and
 # other global directives; an early drop-in Match can leak to later files.
