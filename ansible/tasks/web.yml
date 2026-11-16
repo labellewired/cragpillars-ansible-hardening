@@ -199,8 +199,8 @@
 - name: Create Nginx basic authentication file
   community.general.htpasswd:
     path: /etc/nginx/.htpasswd
-    name: "{{ vault_web_username }}"
-    password: "{{ vault_web_password }}"
+    name: "{{ vault_webadmin_username }}"
+    password: "{{ vault_webadmin_password }}"
     owner: root
     group: nginx
     mode: "0640"
