@@ -103,6 +103,14 @@
     permanent: true
     immediate: true
 
+- name: Remove DHCPv6 client from public zone
+  ansible.posix.firewalld:
+    zone: public
+    service: dhcpv6-client
+    state: disabled
+    permanent: true
+    immediate: true
+
 # ------------------------------------------------------------
 # Interface assignments
 # ------------------------------------------------------------

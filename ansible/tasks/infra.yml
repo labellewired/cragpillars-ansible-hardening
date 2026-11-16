@@ -102,8 +102,8 @@
     content: |
       pool pool.ntp.org iburst
 
-      allow {{ public_network }}
       allow {{ administration_network }}
+      bindaddress {{ administration_ip }}
 
       driftfile /var/lib/chrony/drift
       makestep 1.0 3
@@ -220,11 +220,11 @@
 # Firewalld - NTP
 # ------------------------------------------------------------
 
-- name: Allow NTP on public network
+- name: Disable NTP on public network
   ansible.posix.firewalld:
     zone: public
     service: ntp
-    state: enabled
+    state: disabled
     permanent: true
     immediate: true
 
