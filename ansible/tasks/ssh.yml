@@ -80,9 +80,12 @@
       MaxAuthTries 3
       LoginGraceTime 30
 
-      # Session liveness (not an idle-user timeout).
+      # Detect unresponsive SSH clients.
       ClientAliveInterval 300
       ClientAliveCountMax 2
+
+      # Close inactive SSH session channels after 10 minutes.
+      ChannelTimeout session=10m
 
       # No SSH forwarding or tunneling through any server.
       X11Forwarding no
