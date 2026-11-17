@@ -28,33 +28,99 @@
     owner: root
     group: named
     mode: "0640"
+    validate: /usr/sbin/named-checkconf %s
     content: |
       options {
+          // Listen on localhost and both network interfaces.
           listen-on port 53 {
               127.0.0.1;
               {{ public_ip }};
               {{ administration_ip }};
           };
 
+          // IPv6 is disabled throughout the infrastructure.
           listen-on-v6 { none; };
 
           directory "/var/named";
 
+          // Only trusted networks may query this DNS server.
           allow-query {
               127.0.0.1;
               {{ public_network }};
               {{ administration_network }};
           };
 
-          recursion no;
+          // Resolve external domains through Quad9.
+          recursion yes;
+          forward only;
+          forwarders { 9.9.9.9; };
+
+          // Restrict recursive resolution and cache access.
+          allow-recursion {
+              127.0.0.1;
+              {{ public_network }};
+              {{ administration_network }};
+          };
+
+          allow-query-cache {
+              127.0.0.1;
+              {{ public_network }};
+              {{ administration_network }};
+          };
 
           dnssec-validation yes;
       };
 
-      zone "{{ crag_domain }}" IN {
-          type master;
-          file "{{ crag_domain }}.zone";
-          allow-update { none; };
+      // Administration clients receive the administration IP.
+      view "administration" {
+          match-clients {
+              127.0.0.1;
+              {{ administration_network }};
+          };
+
+          match-destinations {
+              127.0.0.1;
+              {{ administration_ip }};
+          };
+
+          recursion yes;
+
+          zone "{{ crag_domain }}" IN {
+              type master;
+              file "{{ crag_domain }}.zone";
+              allow-update { none; };
+          };
+
+          zone "cragpillars.internal" IN {
+              type master;
+              file "cragpillars-admin.zone";
+              allow-update { none; };
+          };
+      };
+
+      // Public clients receive the public IP.
+      view "public" {
+          match-clients {
+              {{ public_network }};
+          };
+
+          match-destinations {
+              {{ public_ip }};
+          };
+
+          recursion yes;
+
+          zone "{{ crag_domain }}" IN {
+              type master;
+              file "{{ crag_domain }}.zone";
+              allow-update { none; };
+          };
+
+          zone "cragpillars.internal" IN {
+              type master;
+              file "cragpillars-public.zone";
+              allow-update { none; };
+          };
       };
   notify: Restart named
 
@@ -64,6 +130,7 @@
     owner: root
     group: named
     mode: "0640"
+    validate: /usr/sbin/named-checkzone {{ crag_domain }} %s
     content: |
       $TTL 3600
 
@@ -81,6 +148,56 @@
       web         IN A 10.10.1.20
       www         IN A 10.10.1.20
       infra       IN A 10.10.1.40
+  notify: Restart named
+
+- name: Deploy public website DNS zone
+  ansible.builtin.copy:
+    dest: /var/named/cragpillars-public.zone
+    owner: root
+    group: named
+    mode: "0640"
+    validate: /usr/sbin/named-checkzone cragpillars.internal %s
+    content: |
+      $TTL 3600
+
+      ; CragPillars website - Public network
+      @   IN SOA infra.crag.internal. admin.crag.internal. (
+              1
+              3600
+              900
+              604800
+              86400
+      )
+
+          IN NS infra.crag.internal.
+
+      ; Public website address
+      www IN A 10.10.1.20
+  notify: Restart named
+
+- name: Deploy administration website DNS zone
+  ansible.builtin.copy:
+    dest: /var/named/cragpillars-admin.zone
+    owner: root
+    group: named
+    mode: "0640"
+    validate: /usr/sbin/named-checkzone cragpillars.internal %s
+    content: |
+      $TTL 3600
+
+      ; CragPillars website - Administration network
+      @   IN SOA infra.crag.internal. admin.crag.internal. (
+              1
+              3600
+              900
+              604800
+              86400
+      )
+
+          IN NS infra.crag.internal.
+
+      ; Administration website address
+      www IN A 10.10.10.20
   notify: Restart named
 
 - name: Enable and start BIND
