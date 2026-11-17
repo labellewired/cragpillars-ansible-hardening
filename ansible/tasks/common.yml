@@ -134,6 +134,24 @@
     reload: true
 
 # ------------------------------------------------------------
+# Interactive shell inactivity timeout
+# ------------------------------------------------------------
+
+- name: Configure interactive Bash inactivity timeout
+  ansible.builtin.copy:
+    dest: /etc/profile.d/ssh-timeout.sh
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Close inactive interactive Bash shells after 15 minutes.
+      if [[ $- == *i* ]]; then
+          TMOUT=900
+          readonly TMOUT
+          export TMOUT
+      fi
+
+# ------------------------------------------------------------
 # Sudo logging
 # ------------------------------------------------------------
 

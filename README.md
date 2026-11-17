@@ -19,7 +19,7 @@ Each VM has two network interfaces:
 | Web            | `web.crag.internal`     | `10.10.1.20` | `10.10.10.20`    | Nginx, PHP-FPM, and local MariaDB |
 | Infrastructure | `infra.crag.internal`   | `10.10.1.40` | `10.10.10.40`    | DNS, NTP, central logs, auditing  |
 
-The lab also defines a public client (`10.10.1.200`) and an administration workstation (`10.10.10.100`). `www.cragpillars.com` is a **lab web hostname placeholder**; using it outside the lab requires appropriate DNS configuration.
+The lab also defines a public client (`10.10.1.200`) and an administration workstation (`10.10.10.100`). The internal website hostname is `www.cragpillars.internal`. Split-horizon DNS resolves it to `10.10.1.20` on the public network and `10.10.10.20` on the administration network.
 
 The editable network diagram is available at [docs/diagrams/architecture.drawio](docs/diagrams/architecture.drawio).
 
@@ -37,6 +37,7 @@ The three Kickstart files provide a minimal CentOS Stream 10 installation, initi
 - Persistent systemd journal and sudo logging
 - Kernel address-space layout randomization (ASLR)
 - Required repositories, packages, and services
+- SSH channel inactivity timeout, unused connection timeout, and interactive Bash inactivity timeout
 
 ### Bastion
 
@@ -54,7 +55,7 @@ The three Kickstart files provide a minimal CentOS Stream 10 installation, initi
 
 ### Infrastructure
 
-- BIND authoritative DNS for `crag.internal`
+- BIND authoritative DNS for `crag.internal`, split-horizon DNS for `cragpillars.internal`, and external DNS forwarding through `Quad9`
 - Chrony time service
 - TCP rsyslog collection from Bastion and Web
 - Auditd rules for sensitive configuration files

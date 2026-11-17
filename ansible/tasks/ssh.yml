@@ -84,8 +84,11 @@
       ClientAliveInterval 300
       ClientAliveCountMax 2
 
-      # Close inactive SSH session channels after 10 minutes.
-      ChannelTimeout session=10m
+      # Close inactive SSH session channels after 15 minutes.
+      ChannelTimeout *=15m
+
+      # Disconnect SSH connections with no open channels after 1 minute.
+      UnusedConnectionTimeout 1m
 
       # No SSH forwarding or tunneling through any server.
       X11Forwarding no
